@@ -44,8 +44,6 @@ static void _calculate_moves(int start, int finish, int total) {
     int prev_moves = 99999999;
     int next_moves = 99999999;
 
-    yed_log("start:%d finish:%d total:%d\n", start, finish, total);
-
     if (start == finish) { return; }
 
     if (start < finish) {
@@ -56,16 +54,14 @@ static void _calculate_moves(int start, int finish, int total) {
         next_moves = finish + (total_indx - start);
     }
 
-    yed_log("prev:%d next:%d\n", prev_moves, next_moves);
-
     if (prev_moves >= next_moves) {
         for (int i = 0; i < next_moves; i++) {
-            yed_log("frame-next\n");
+/*             yed_log("frame-next\n"); */
             fprintf(fp, "frame-next\n");
         }
     } else {
         for (int i = 0; i < prev_moves; i++) {
-            yed_log("frame-prev\n");
+/*             yed_log("frame-prev\n"); */
             fprintf(fp, "frame-prev\n");
         }
     }
@@ -78,12 +74,6 @@ static void _search(yed_frame_tree *curr_frame_tree, int current_indx) {
             f_fixup.frame = curr_frame_tree->frame;
             f_fixup.indx  = current_indx;
             array_push(queue, f_fixup);
-            yed_log("current:%d\n", current_indx);
-
-            frame_fixup *tmp;
-            array_traverse(queue, tmp) {
-                yed_log("indx:%d\n", (*tmp).indx);
-            }
         }
         return;
     }
@@ -91,10 +81,10 @@ static void _search(yed_frame_tree *curr_frame_tree, int current_indx) {
     _calculate_moves(command_indx, current_indx, total_indx);
 
     if (curr_frame_tree->split_kind == FTREE_VSPLIT) {
-        yed_log("frame-vsplit\n");
+/*         yed_log("frame-vsplit\n"); */
         fprintf(fp, "frame-vsplit\n");
     } else {
-        yed_log("frame-hsplit\n");
+/*         yed_log("frame-hsplit\n"); */
         fprintf(fp, "frame-hsplit\n");
     }
 
@@ -128,7 +118,7 @@ static void _save_current_yed_layout(int n_args, char **args) {
 
     if (!ys->options.no_init) {
         path = get_config_item_path("my_yed_layout.yedrc");
-        yed_log("path: %s\n", path);
+/*         yed_log("path: %s\n", path); */
         fp = fopen (path, "w");
         free(path);
     }
@@ -137,7 +127,7 @@ static void _save_current_yed_layout(int n_args, char **args) {
         return;
     }
 
-    yed_log("start save\n");
+/*     yed_log("start save\n"); */
 
     array_traverse(ys->frame_trees, root) {
         if ((*root) == yed_frame_tree_get_root(*root)) {
@@ -145,7 +135,7 @@ static void _save_current_yed_layout(int n_args, char **args) {
             total_indx   = 1;
             queue        = array_make(frame_fixup);
 
-            yed_log("frame-new\n");
+/*             yed_log("frame-new\n"); */
             fprintf(fp, "frame-new\n");
             _search(*root, 0);
 
@@ -154,7 +144,7 @@ static void _save_current_yed_layout(int n_args, char **args) {
                 command_indx = (*f_fixup).indx;
 
                 if ((*f_fixup).frame->name) {
-                    yed_log("frame-name %s\n", (*f_fixup).frame->name);
+/*                     yed_log("frame-name %s\n", (*f_fixup).frame->name); */
                     fprintf(fp, "frame-name %s\n", (*f_fixup).frame->name);
                 }
 
@@ -163,13 +153,14 @@ static void _save_current_yed_layout(int n_args, char **args) {
                     fprintf(fp, "buffer %s\n", (*f_fixup).frame->buffer->name);
                 }
 
-                yed_log("frame-move\n");
+/*                 yed_log("frame-move\n"); */
 /*                 fprintf(fp, "frame-move\n"); */
 
                 row = (*f_fixup).frame->bheight - ys->active_frame->bheight;
                 col = (*f_fixup).frame->bwidth - ys->active_frame->bwidth;
                 yed_log("frame-resize-cmdl %d %d\n", (*f_fixup).frame->bheight, (*f_fixup).frame->bwidth);
-                fprintf(fp, "frame-resize-cmdl %d %d\n", (*f_fixup).frame->bheight, (*f_fixup).frame->bwidth);
+                yed_log("frame-resize-cmdl %f %f\n", (*f_fixup).frame->height_f, (*f_fixup).frame->width_f);
+                fprintf(fp, "frame-resize-cmdl %f %f\n", (*f_fixup).frame->height_f, (*f_fixup).frame->width_f);
             }
             array_free(queue);
         }
@@ -194,12 +185,16 @@ static void _frame_resize(int n_args, char **args) {
     fheight = atof(args[0]);
     fwidth  = atof(args[1]);
 
+    yed_log("%f %f\n", fheight, fwidth);
+
     if (ys->active_frame &&
         ys->active_frame->tree &&
         ys->active_frame->tree->parent) {
 
-        cur_r = ys->active_frame->height_f * ys->term_rows;
-        cur_c = ys->active_frame->width_f  * ys->term_cols;
+        cur_r = fheight * ys->term_rows;
+        cur_c = fwidth  * ys->term_cols;
+
+        yed_log("%d %d\n", cur_r, cur_c);
 
         row = cur_r - ys->active_frame->bheight;
         col = cur_c - ys->active_frame->bwidth;
