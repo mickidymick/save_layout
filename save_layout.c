@@ -13,9 +13,7 @@ static FILE       *fp;
 
 /* internal custom commands */
 static void _save_layout_cmd(int n_args, char **args);
-static void _frame_resize(int n_args, char **args);
-static void _frame_tree_resize(int n_args, char **args);
-static void _frame_tree_set_pos(int n_args, char **args);
+static void _frame_open_command_line_buffers(int n_args, char **args);
 
 /* internal functions */
 static void _save_layout_unload(yed_plugin *self);
@@ -31,9 +29,7 @@ int yed_plugin_boot(yed_plugin *self) {
 
     yed_plugin_set_command(self, "save-current-yed-layout", _save_current_yed_layout);
     yed_plugin_set_command(self, "save-layout-cmd", _save_layout_cmd);
-    yed_plugin_set_command(self, "frame-resize-cmdl", _frame_resize);
-    yed_plugin_set_command(self, "frame-tree-resize-cmdl", _frame_tree_resize);
-    yed_plugin_set_command(self, "frame-tree-set-pos", _frame_tree_set_pos);
+    yed_plugin_set_command(self, "open-command-line-buffers", _frame_open_command_line_buffers);
 
     if (yed_get_var("yed-layout-file") == NULL) {
         yed_set_var("yed-layout-file", "");
@@ -136,9 +132,9 @@ static void _save_current_yed_layout(int n_args, char **args) {
 
             fprintf(fp, "save-layout-cmd \"frame-new\"\n");
 
-            fprintf(fp, "save-layout-cmd \"frame-tree-resize-cmdl %f %f\"\n", (*root)->height, (*root)->width);
+            fprintf(fp, "save-layout-cmd \"frame-tree-resize %f %f\"\n", (*root)->height, (*root)->width);
 
-            fprintf(fp, "save-layout-cmd \"frame-tree-set-pos %f %f\"\n", (*root)->top, (*root)->left);
+            fprintf(fp, "save-layout-cmd \"frame-tree-set-position %f %f\"\n", (*root)->top, (*root)->left);
 
             _search(*root, 0);
 
@@ -154,13 +150,52 @@ static void _save_current_yed_layout(int n_args, char **args) {
                     fprintf(fp, "save-layout-cmd \"buffer %s\"\n", (*f_fixup).frame->buffer->name);
                 }
 
-                fprintf(fp, "save-layout-cmd \"frame-resize-cmdl %f %f\"\n", (*f_fixup).frame->height_f, (*f_fixup).frame->width_f);
+                fprintf(fp, "save-layout-cmd \"frame-resize %f %f\"\n", (*f_fixup).frame->height_f, (*f_fixup).frame->width_f);
             }
             array_free(queue);
         }
     }
 
     fclose(fp);
+}
+
+static void _frame_open_command_line_buffers(int n_args, char **args) {
+    yed_frame **frame_it;
+    int i;
+
+    if (array_len(ys->frames) == 0){
+        if (n_args >= 1) {
+            YEXE("frame-new");
+        }
+
+        for (i = 0; i < n_args; i++) {
+            YEXE("buffer", args[i]);
+        }
+
+        YEXE("buffer", args[0]);
+
+        if (n_args > 1) {
+            YEXE("frame-vsplit");
+            YEXE("buffer", args[1]);
+            YEXE("frame-prev");
+        }
+    } else {
+        for (i = 0; i < n_args; i++) {
+            YEXE("buffer-hidden", args[i]);
+        }
+
+        if (n_args >= 1) {
+            for (i = 0; i < n_args; i++) {
+                array_traverse(ys->frames, frame_it) {
+                    if ((*frame_it)->buffer) { continue; }
+
+                    yed_activate_frame((*frame_it));
+                    YEXE("buffer", args[i]);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 static void _save_layout_cmd(int n_args, char **args) {
@@ -182,108 +217,6 @@ static void _save_layout_cmd(int n_args, char **args) {
             yed_execute_command_from_split(split);
         }
         free_string_array(split);
-    }
-}
-
-static void _frame_resize(int n_args, char **args) {
-    float fheight;
-    float fwidth;
-    int   cur_r;
-    int   cur_c;
-    int   row;
-    int   col;
-
-    if (n_args != 2) {
-        yed_cerr("expected 2 argument, but got %d", n_args);
-        return;
-    }
-
-    fheight = atof(args[0]);
-    fwidth  = atof(args[1]);
-
-    if (ys->active_frame &&
-        ys->active_frame->tree &&
-        ys->active_frame->tree->parent) {
-
-        cur_r = fheight * ys->term_rows;
-        cur_c = fwidth  * ys->term_cols;
-
-        row = cur_r - ys->active_frame->bheight;
-        col = cur_c - ys->active_frame->bwidth;
-
-        if (ys->active_frame->tree->parent->child_trees[0] == ys->active_frame->tree) {
-            yed_resize_frame(ys->active_frame, row, col);
-        } else {
-            if (ys->active_frame->tree->parent->split_kind == FTREE_HSPLIT) {
-                row *= -1;
-                col  =  0;
-            } else {
-                row  =  0;
-                col *= -1;
-            }
-
-            yed_resize_frame_tree(ys->active_frame->tree->parent->child_trees[0], row, col);
-        }
-    }
-}
-
-static void _frame_tree_resize(int n_args, char **args) {
-    yed_frame_tree *root;
-    float fheight;
-    float fwidth;
-    int   root_r;
-    int   root_c;
-    int   cur_r;
-    int   cur_c;
-    int   row;
-    int   col;
-
-    if (n_args != 2) {
-        yed_cerr("expected 2 argument, but got %d", n_args);
-        return;
-    }
-
-    fheight = atof(args[0]);
-    fwidth  = atof(args[1]);
-
-    if (ys->active_frame) {
-        root  = yed_frame_tree_get_root(ys->active_frame->tree);
-        cur_r  = fheight * ys->term_rows;
-        cur_c  = fwidth  * ys->term_cols;
-        root_r = root->height * ys->term_rows;
-        root_c = root->width  * ys->term_cols;
-
-        row = cur_r - root_r;
-        col = cur_c - root_c;
-
-        yed_resize_frame_tree(root, row, col);
-    }
-}
-
-static void _frame_tree_set_pos(int n_args, char **args) {
-    float ftop;
-    float fleft;
-    int   cur_r;
-    int   cur_c;
-    int   row;
-    int   col;
-
-    if (n_args != 2) {
-        yed_cerr("expected 2 argument, but got %d", n_args);
-        return;
-    }
-
-    ftop  = atof(args[0]);
-    fleft = atof(args[1]);
-
-    if (ys->active_frame) {
-        cur_r = ftop  * ys->term_rows;
-        cur_c = fleft * ys->term_cols;
-
-        row = cur_r - ys->active_frame->top;
-        col = cur_c - ys->active_frame->left;
-
-        yed_move_frame(ys->active_frame, row, col);
     }
 }
 
