@@ -172,7 +172,9 @@ static void _frame_open_command_line_buffers(int n_args, char **args) {
             YEXE("buffer", args[i]);
         }
 
-        YEXE("buffer", args[0]);
+        if (n_args >= 1) {
+            YEXE("buffer", args[0]);
+        }
 
         if (n_args > 1) {
             YEXE("frame-vsplit");
@@ -184,15 +186,13 @@ static void _frame_open_command_line_buffers(int n_args, char **args) {
             YEXE("buffer-hidden", args[i]);
         }
 
-        if (n_args >= 1) {
-            for (i = 0; i < n_args; i++) {
-                array_traverse(ys->frames, frame_it) {
-                    if ((*frame_it)->buffer) { continue; }
+        for (i = 0; i < n_args; i++) {
+            array_traverse(ys->frames, frame_it) {
+                if ((*frame_it)->buffer) { continue; }
 
-                    yed_activate_frame((*frame_it));
-                    YEXE("buffer", args[i]);
-                    break;
-                }
+                yed_activate_frame((*frame_it));
+                YEXE("buffer", args[i]);
+                break;
             }
         }
     }
