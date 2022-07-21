@@ -14,10 +14,12 @@ static FILE       *fp;
 /* internal custom commands */
 static void _save_layout_cmd(int n_args, char **args);
 static void _frame_open_command_line_buffers(int n_args, char **args);
+static void _save_current_yed_layout(int n_args, char **args);
+static void _save_current_yed_layout_local(int n_args, char **args);
+static void _save_layout_clear_frame_tree(int n_args, char **args);
 
 /* internal functions */
 static void _save_layout_unload(yed_plugin *self);
-static void _save_current_yed_layout(int n_args, char **args);
 static void _search(yed_frame_tree *curr_frame_tree, int current_indx);
 static void _calculate_moves(int start, int finish, int total);
 
@@ -27,7 +29,9 @@ int yed_plugin_boot(yed_plugin *self) {
 
     Self = self;
 
+    yed_plugin_set_command(self, "yed-clear-frame-trees", _save_layout_clear_frame_tree);
     yed_plugin_set_command(self, "save-current-yed-layout", _save_current_yed_layout);
+    yed_plugin_set_command(self, "save-current-yed-layout-local", _save_current_yed_layout_local);
     yed_plugin_set_command(self, "save-layout-cmd", _save_layout_cmd);
     yed_plugin_set_command(self, "open-command-line-buffers", _frame_open_command_line_buffers);
 
@@ -130,6 +134,63 @@ static void _save_current_yed_layout(int n_args, char **args) {
             total_indx   = 1;
             queue        = array_make(frame_fixup);
 
+            fprintf(fp, "save-layout-cmd \"yed-clear-frame-trees\"\n");
+
+            fprintf(fp, "save-layout-cmd \"frame-new\"\n");
+
+            fprintf(fp, "save-layout-cmd \"frame-tree-resize %f %f\"\n", (*root)->height, (*root)->width);
+
+            fprintf(fp, "save-layout-cmd \"frame-tree-set-position %f %f\"\n", (*root)->top, (*root)->left);
+
+            _search(*root, 0);
+
+            array_traverse(queue, f_fixup) {
+                _calculate_moves(command_indx, (*f_fixup).indx, total_indx);
+                command_indx = (*f_fixup).indx;
+
+                if ((*f_fixup).frame->name) {
+                    fprintf(fp, "save-layout-cmd \"frame-name %s\"\n", (*f_fixup).frame->name);
+                }
+
+                if ((*f_fixup).frame->buffer) {
+                    fprintf(fp, "save-layout-cmd \"buffer %s\"\n", (*f_fixup).frame->buffer->name);
+                }
+
+                fprintf(fp, "save-layout-cmd \"frame-resize %f %f\"\n", (*f_fixup).frame->height_f, (*f_fixup).frame->width_f);
+            }
+            array_free(queue);
+        }
+    }
+
+    fclose(fp);
+}
+
+static void _save_current_yed_layout_local(int n_args, char **args) {
+    yed_frame_tree **root;
+    char             line[512];
+    char             str[512];
+    char             app[512];
+    char            *path;
+    frame_fixup     *f_fixup;
+
+    if (!ys->options.no_init) {
+        path = strdup("my_yed_layout.yedrc");
+        fp = fopen (path, "w");
+        free(path);
+    }
+
+    if (fp == NULL) {
+        return;
+    }
+
+    array_traverse(ys->frame_trees, root) {
+        if ((*root) == yed_frame_tree_get_root(*root)) {
+            command_indx = 0;
+            total_indx   = 1;
+            queue        = array_make(frame_fixup);
+
+            fprintf(fp, "save-layout-cmd \"yed-clear-frame-trees\"\n");
+
             fprintf(fp, "save-layout-cmd \"frame-new\"\n");
 
             fprintf(fp, "save-layout-cmd \"frame-tree-resize %f %f\"\n", (*root)->height, (*root)->width);
@@ -163,7 +224,7 @@ static void _frame_open_command_line_buffers(int n_args, char **args) {
     yed_frame **frame_it;
     int i;
 
-    if (array_len(ys->frames) == 0){
+    if (array_len(ys->frames) <= 0){
         if (n_args >= 1) {
             YEXE("frame-new");
         }
@@ -182,8 +243,11 @@ static void _frame_open_command_line_buffers(int n_args, char **args) {
             YEXE("frame-prev");
         }
     } else {
+
         for (i = 0; i < n_args; i++) {
-            YEXE("buffer-hidden", args[i]);
+            if (!yed_get_buffer(args[i])) {
+                YEXE("buffer-hidden", args[i]);
+            }
         }
 
         for (i = 0; i < n_args; i++) {
@@ -217,6 +281,15 @@ static void _save_layout_cmd(int n_args, char **args) {
             yed_execute_command_from_split(split);
         }
         free_string_array(split);
+    }
+}
+
+static void _save_layout_clear_frame_tree(int n_args, char **args) {
+    yed_frame** fp;
+
+    while(array_len(ys->frames) > 0) {
+        fp = array_last(ys->frames);
+        yed_delete_frame(*fp);
     }
 }
 
