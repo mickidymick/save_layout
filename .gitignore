@@ -1,2 +1,6 @@
+*.so
 .yedrc
-save_layout.so
+my_yed_layout.yedrc
+.ccls-cache
+compile_commands.json
+debug_build.sh
